@@ -17,6 +17,7 @@ from thsr_ticket.configs.common import (
     DAYS_BEFORE_BOOKING_AVAILABLE,
     MAX_TICKET_NUM,
 )
+from thsr_ticket.ml.ocr import recognize_captcha
 
 
 class FirstPageFlow:
@@ -147,7 +148,25 @@ def _parse_search_by(page: BeautifulSoup) -> str:
 
 
 def _input_security_code(img_resp: bytes) -> str:
-    print('輸入驗證碼：')
+    """輸入驗證碼，支援 OCR 自動識別
+
+    流程：
+    1. 使用 OCR 識別驗證碼
+    2. 顯示驗證碼圖片供用戶確認
+    3. 預填 OCR 結果，用戶可按 Enter 確認或輸入正確值覆蓋
+    """
+    # OCR 識別
+    ocr_result = recognize_captcha(img_resp)
+
+    # 顯示驗證碼圖片
     image = Image.open(io.BytesIO(img_resp))
     image.show()
-    return input()
+
+    # 提示用戶確認或修改
+    if ocr_result:
+        print(f'驗證碼識別結果: {ocr_result}')
+        user_input = input('按 Enter 確認，或輸入正確的驗證碼：')
+        return user_input if user_input else ocr_result
+    else:
+        print('OCR 識別失敗，請手動輸入驗證碼：')
+        return input()

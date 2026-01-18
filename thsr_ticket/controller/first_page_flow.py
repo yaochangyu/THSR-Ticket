@@ -1,7 +1,8 @@
 import io
 import json
+import time
 from PIL import Image
-from typing import Tuple
+from typing import Tuple, List
 from datetime import date, timedelta
 
 from bs4 import BeautifulSoup
@@ -10,7 +11,7 @@ from requests.models import Response
 from thsr_ticket.model.db import Record
 from thsr_ticket.remote.http_request import HTTPRequest
 from thsr_ticket.configs.web.param_schema import BookingModel
-from thsr_ticket.configs.web.parse_html_element import BOOKING_PAGE
+from thsr_ticket.configs.web.parse_html_element import BOOKING_PAGE, ERROR_FEEDBACK
 from thsr_ticket.configs.web.enums import StationMapping, TicketType
 from thsr_ticket.configs.common import (
     AVAILABLE_TIME_TABLE,
@@ -18,6 +19,9 @@ from thsr_ticket.configs.common import (
     MAX_TICKET_NUM,
 )
 from thsr_ticket.ml.ocr import recognize_captcha
+
+MAX_CAPTCHA_RETRY = 3
+CAPTCHA_RETRY_INTERVAL = 1  # 秒
 
 
 class FirstPageFlow:
@@ -32,26 +36,60 @@ class FirstPageFlow:
         img_resp = self.client.request_security_code_img(book_page).content
         page = BeautifulSoup(book_page, features='html.parser')
 
-        book_model = BookingModel(
-            start_station=self.select_station('啟程'),
-            dest_station=self.select_station('到達', default_value=StationMapping.Zuouing.value),
-            outbound_date=self.select_date('出發'),
-            outbound_time=self.select_time('啟程'),
-            adult_ticket_num=self.select_ticket_num(TicketType.ADULT, default_ticket_num=0),
-            child_ticket_num=self.select_ticket_num(TicketType.CHILD, default_ticket_num=0),
-            disabled_ticket_num=self.select_ticket_num(TicketType.DISABLED, default_ticket_num=2),
-            elder_ticket_num=self.select_ticket_num(TicketType.ELDER, default_ticket_num=0),
-            college_ticket_num=self.select_ticket_num(TicketType.COLLEGE, default_ticket_num=0),
-            youth_ticket_num=self.select_ticket_num(TicketType.YOUTH, default_ticket_num=1),
-            seat_prefer=_parse_seat_prefer_value(page),
-            types_of_trip=_parse_types_of_trip_value(page),
-            search_by=_parse_search_by(page),
-            security_code=_input_security_code(img_resp),
-        )
-        json_params = book_model.json(by_alias=True)
-        dict_params = json.loads(json_params)
-        resp = self.client.submit_booking_form(dict_params)
-        return resp, book_model
+        # 收集用戶輸入的表單資料（驗證碼除外）
+        form_data = {
+            'start_station': self.select_station('啟程'),
+            'dest_station': self.select_station('到達', default_value=StationMapping.Zuouing.value),
+            'outbound_date': self.select_date('出發'),
+            'outbound_time': self.select_time('啟程'),
+            'adult_ticket_num': self.select_ticket_num(TicketType.ADULT, default_ticket_num=0),
+            'child_ticket_num': self.select_ticket_num(TicketType.CHILD, default_ticket_num=0),
+            'disabled_ticket_num': self.select_ticket_num(TicketType.DISABLED, default_ticket_num=2),
+            'elder_ticket_num': self.select_ticket_num(TicketType.ELDER, default_ticket_num=0),
+            'college_ticket_num': self.select_ticket_num(TicketType.COLLEGE, default_ticket_num=0),
+            'youth_ticket_num': self.select_ticket_num(TicketType.YOUTH, default_ticket_num=1),
+            'seat_prefer': _parse_seat_prefer_value(page),
+            'types_of_trip': _parse_types_of_trip_value(page),
+            'search_by': _parse_search_by(page),
+        }
+
+        # 驗證碼重試邏輯
+        retry_count = 0
+        while True:
+            use_manual = retry_count >= MAX_CAPTCHA_RETRY
+            security_code = _input_security_code(img_resp, force_manual=use_manual)
+
+            book_model = BookingModel(
+                **form_data,
+                security_code=security_code,
+            )
+            json_params = book_model.json(by_alias=True)
+            dict_params = json.loads(json_params)
+            resp = self.client.submit_booking_form(dict_params)
+
+            # 檢查是否有驗證碼錯誤
+            errors = _parse_error_feedback(resp.content)
+            captcha_error = any('檢測碼' in err or '驗證碼' in err for err in errors)
+
+            if not captcha_error:
+                return resp, book_model
+
+            retry_count += 1
+            if use_manual:
+                # 手動輸入也失敗，直接返回讓上層處理
+                return resp, book_model
+
+            print(f'驗證碼錯誤，正在重試... ({retry_count}/{MAX_CAPTCHA_RETRY})')
+            time.sleep(CAPTCHA_RETRY_INTERVAL)
+
+            # 重新請求頁面和驗證碼
+            book_page = self.client.request_booking_page().content
+            img_resp = self.client.request_security_code_img(book_page).content
+            page = BeautifulSoup(book_page, features='html.parser')
+            # 更新頁面相關的值
+            form_data['seat_prefer'] = _parse_seat_prefer_value(page)
+            form_data['types_of_trip'] = _parse_types_of_trip_value(page)
+            form_data['search_by'] = _parse_search_by(page)
 
     def select_station(self, travel_type: str, default_value: int = StationMapping.Taipei.value) -> int:
         if (
@@ -147,22 +185,37 @@ def _parse_search_by(page: BeautifulSoup) -> str:
     return tag.attrs['value']
 
 
-def _input_security_code(img_resp: bytes) -> str:
+def _parse_error_feedback(html: bytes) -> List[str]:
+    """解析頁面中的錯誤訊息"""
+    page = BeautifulSoup(html, features='html.parser')
+    error_elements = page.find_all(**ERROR_FEEDBACK)
+    return [elem.get_text(strip=True) for elem in error_elements]
+
+
+def _input_security_code(img_resp: bytes, force_manual: bool = False) -> str:
     """輸入驗證碼，支援 OCR 自動識別
+
+    Args:
+        img_resp: 驗證碼圖片的 bytes 資料
+        force_manual: 是否強制手動輸入（OCR 重試次數用盡後使用）
 
     流程：
     1. 使用 OCR 識別驗證碼
-    2. 顯示驗證碼圖片供用戶確認
-    3. 預填 OCR 結果，用戶可按 Enter 確認或輸入正確值覆蓋
+    2. 若 force_manual=False 且 OCR 成功，直接使用 OCR 結果
+    3. 若 force_manual=True 或 OCR 失敗，顯示圖片讓用戶手動輸入
     """
     # OCR 識別
     ocr_result = recognize_captcha(img_resp)
 
-    # 顯示驗證碼圖片
+    # 自動重試模式：OCR 成功則直接使用
+    if not force_manual and ocr_result:
+        print(f'驗證碼自動識別: {ocr_result}')
+        return ocr_result
+
+    # 手動輸入模式：顯示圖片讓用戶輸入
     image = Image.open(io.BytesIO(img_resp))
     image.show()
 
-    # 提示用戶確認或修改
     if ocr_result:
         print(f'驗證碼識別結果: {ocr_result}')
         user_input = input('按 Enter 確認，或輸入正確的驗證碼：')

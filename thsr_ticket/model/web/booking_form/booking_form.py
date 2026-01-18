@@ -39,6 +39,7 @@ class BookingForm(AbstractParams):
         self._disabled_ticket_num: str = "0W"
         self._elder_ticket_num: str = "0E"
         self._college_ticket_num: str = "0P"
+        self._youth_ticket_num: str = "0T"
         self.security_code: str = None  # Required
 
         # Auto set
@@ -66,6 +67,7 @@ class BookingForm(AbstractParams):
             "ticketPanel:rows:2:ticketAmount": self.disabled_ticket_num,
             "ticketPanel:rows:3:ticketAmount": self.elder_ticket_num,
             "ticketPanel:rows:4:ticketAmount": self.college_ticket_num,
+            "ticketPanel:rows:5:ticketAmount": self.youth_ticket_num,
             "homeCaptcha:securityCode": self.security_code,
         }
 
@@ -205,6 +207,15 @@ class BookingForm(AbstractParams):
     def college_ticket_num(self, value: str) -> None:
         self._validate_value("ticketPanel:rows:4:ticketAmount", value)
         self._college_ticket_num = value
+
+    @property
+    def youth_ticket_num(self) -> str:
+        return self._youth_ticket_num
+
+    @youth_ticket_num.setter
+    def youth_ticket_num(self, value: str) -> None:
+        self._validate_value("ticketPanel:rows:5:ticketAmount", value)
+        self._youth_ticket_num = value
 
     def _validate_date(self, value: Any) -> datetime:
         return datetime.strptime(value, '%Y/%m/%d')

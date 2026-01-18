@@ -22,3 +22,4 @@ class TicketType(Enum):
     DISABLED = 'W'
     ELDER = 'E'
     COLLEGE = 'P'
+    YOUTH = 'T'

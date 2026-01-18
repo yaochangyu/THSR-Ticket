@@ -15,6 +15,11 @@ class Record(NamedTuple):
     dest_station: int = None
     outbound_time: str = None
     adult_num: str = None
+    child_num: str = None
+    disabled_num: str = None
+    elder_num: str = None
+    college_num: str = None
+    youth_num: str = None
 
 
 class ParamDB:
@@ -33,7 +38,12 @@ class ParamDB:
             book_model.start_station,
             book_model.dest_station,
             book_model.outbound_time,
-            book_model.adult_ticket_num
+            book_model.adult_ticket_num,
+            book_model.child_ticket_num,
+            book_model.disabled_ticket_num,
+            book_model.elder_ticket_num,
+            book_model.college_ticket_num,
+            book_model.youth_ticket_num
         )._asdict()  # type: ignore
         with TinyDB(self.db_path, sort_keys=True, indent=4) as db:
             hist = db.search(Query().personal_id == ticket.personal_id)

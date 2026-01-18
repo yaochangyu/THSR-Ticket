@@ -36,7 +36,12 @@ class FirstPageFlow:
             dest_station=self.select_station('到達', default_value=StationMapping.Zuouing.value),
             outbound_date=self.select_date('出發'),
             outbound_time=self.select_time('啟程'),
-            adult_ticket_num=self.select_ticket_num(TicketType.ADULT),
+            adult_ticket_num=self.select_ticket_num(TicketType.ADULT, default_ticket_num=0),
+            child_ticket_num=self.select_ticket_num(TicketType.CHILD, default_ticket_num=0),
+            disabled_ticket_num=self.select_ticket_num(TicketType.DISABLED, default_ticket_num=2),
+            elder_ticket_num=self.select_ticket_num(TicketType.ELDER, default_ticket_num=0),
+            college_ticket_num=self.select_ticket_num(TicketType.COLLEGE, default_ticket_num=0),
+            youth_ticket_num=self.select_ticket_num(TicketType.YOUTH, default_ticket_num=1),
             seat_prefer=_parse_seat_prefer_value(page),
             types_of_trip=_parse_types_of_trip_value(page),
             search_by=_parse_search_by(page),
@@ -100,10 +105,11 @@ class FirstPageFlow:
         if self.record and (
             ticket_num_str := {
                 TicketType.ADULT: self.record.adult_num,
-                TicketType.CHILD: None,
-                TicketType.DISABLED: None,
-                TicketType.ELDER: None,
-                TicketType.COLLEGE: None,
+                TicketType.CHILD: self.record.child_num,
+                TicketType.DISABLED: self.record.disabled_num,
+                TicketType.ELDER: self.record.elder_num,
+                TicketType.COLLEGE: self.record.college_num,
+                TicketType.YOUTH: self.record.youth_num,
             }.get(ticket_type)
         ):
             return ticket_num_str
@@ -114,6 +120,7 @@ class FirstPageFlow:
             TicketType.DISABLED: '愛心',
             TicketType.ELDER: '敬老',
             TicketType.COLLEGE: '大學生',
+            TicketType.YOUTH: '少年',
         }.get(ticket_type)
 
         print(f'選擇{ticket_type_name}票數（0~{MAX_TICKET_NUM}）（預設：{default_ticket_num}）')

@@ -147,6 +147,7 @@ class BookingModel(BaseModel):
     disabled_ticket_num: str = Field('0W', alias='ticketPanel:rows:2:ticketAmount')
     elder_ticket_num: str = Field('0E', alias='ticketPanel:rows:3:ticketAmount')
     college_ticket_num: str = Field('0P', alias='ticketPanel:rows:4:ticketAmount')
+    youth_ticket_num: str = Field('0T', alias='ticketPanel:rows:5:ticketAmount')
 
     @validator('start_station', 'dest_station')
     def check_station(cls, station):
@@ -220,6 +221,12 @@ class BookingModel(BaseModel):
     def check_college_ticket_num(cls, value):
         if not re.match(r'\d+P', value):
             raise ValueError(f'Invalid college ticket num format: {value}')
+        return value
+
+    @validator('youth_ticket_num')
+    def check_youth_ticket_num(cls, value):
+        if not re.match(r'\d+T', value):
+            raise ValueError(f'Invalid youth ticket num format: {value}')
         return value
 
 

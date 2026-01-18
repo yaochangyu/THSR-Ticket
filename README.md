@@ -44,7 +44,66 @@ python -m pip install -r requirements.txt
 python thsr_ticket/main.py
 ```
 
+## 自動訂票模式
 
+程式支援自動訂票模式，可預先設定訂票資訊，執行時自動填入表單。
+
+### 設定方式
+
+1. 複製 `config.example.json` 為 `config.json`
+2. 編輯 `config.json` 填入訂票資訊
+
+```json
+{
+  "start_station": "台北",
+  "dest_station": "台中",
+  "outbound_date": "2025/01/25",
+  "outbound_time": "06:00",
+  "personal_id": "A123456789",
+  "email": "example@email.com",
+  "phone": "0912345678",
+  "tgo_account": "",
+  "tickets": {
+    "adult": 1,
+    "child": 0,
+    "disabled": 0,
+    "elder": 0,
+    "college": 0,
+    "youth": 0
+  }
+}
+```
+
+### 設定欄位說明
+
+| 欄位 | 說明 | 範例 |
+|------|------|------|
+| start_station | 出發站（中文或代碼 1-12） | "台北" 或 2 |
+| dest_station | 到達站 | "台中" 或 7 |
+| outbound_date | 出發日期 | "2025/01/25" |
+| outbound_time | 出發時間（24小時制） | "06:00" |
+| personal_id | 身分證字號 | "A123456789" |
+| email | 電子郵件（選填） | "example@email.com" |
+| phone | 手機號碼（選填） | "0912345678" |
+| tgo_account | 高鐵會員帳號（選填） | "" |
+| tickets | 各票種數量 | 見下方說明 |
+
+### 車站代碼對照
+
+| 代碼 | 車站 | 代碼 | 車站 |
+|------|------|------|------|
+| 1 | 南港 | 7 | 台中 |
+| 2 | 台北 | 8 | 彰化 |
+| 3 | 板橋 | 9 | 雲林 |
+| 4 | 桃園 | 10 | 嘉義 |
+| 5 | 新竹 | 11 | 台南 |
+| 6 | 苗栗 | 12 | 左營 |
+
+### 自動模式特點
+
+- 驗證碼使用 OCR 自動識別（失敗時可手動輸入）
+- 自動選擇乘車時間最短的班次
+- `config.json` 不納入版本控制，個人資料安全
 
 ## 注意事項!!!
 

@@ -12,3 +12,6 @@ dist/
 test.py
 *.code-workspace
 .idea/
+
+# User config (contains personal info)
+config.json

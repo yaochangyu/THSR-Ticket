@@ -1,9 +1,26 @@
-from typing import List, Mapping
+from typing import List, Mapping, Optional
 from bs4.element import Tag
 
 from thsr_ticket.view_model.abstract_view_model import AbstractViewModel
 from thsr_ticket.configs.web.parse_avail_train import ParseAvailTrain
 from thsr_ticket.configs.web.param_schema import Train
+
+
+def _parse_travel_time_minutes(travel_time: str) -> int:
+    """將旅程時間字串轉換為分鐘數
+
+    Args:
+        travel_time: 旅程時間字串（如 "01:30" 或 "00:45"）
+
+    Returns:
+        int: 總分鐘數
+    """
+    parts = travel_time.split(":")
+    if len(parts) == 2:
+        hours = int(parts[0])
+        minutes = int(parts[1])
+        return hours * 60 + minutes
+    return 9999  # 無法解析時回傳大數值
 
 
 
@@ -50,3 +67,17 @@ class AvailTrains(AbstractViewModel):
             joined_str = ', '.join(discounts)
             return f'({joined_str})'
         return ''
+
+    def select_shortest_travel_time(self) -> Optional[Train]:
+        """選擇乘車時間最短的班次
+
+        Returns:
+            Train: 乘車時間最短的班次，若無可用班次則回傳 None
+        """
+        if not self.avail_trains:
+            return None
+
+        return min(
+            self.avail_trains,
+            key=lambda t: _parse_travel_time_minutes(t.travel_time)
+        )

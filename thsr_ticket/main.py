@@ -1,19 +1,25 @@
 import sys
 sys.path.append("./")
 
-from thsr_ticket.remote.endpoint_client import EndpointClient
-from thsr_ticket.model.json.v1.train import Train
 from thsr_ticket.controller.booking_flow import BookingFlow
+from thsr_ticket.controller.auto_booking_flow import AutoBookingFlow
 
 
 def main():
-    flow = BookingFlow()
+    print("=== 高鐵訂票小幫手 ===")
+    print("1. 自動訂票（使用 config.json 設定）")
+    print("2. 手動訂票")
+    print()
+
+    choice = input("請選擇模式 (預設: 1): ") or "1"
+
+    if choice == "1":
+        flow = AutoBookingFlow()
+    else:
+        flow = BookingFlow()
+
     flow.run()
 
 
 if __name__ == "__main__":
-    #client = EndpointClient()
-    #resp = client.get_trains_by_date("2020-01-25")
-    #train = Train().from_json(resp[0])
-
     main()

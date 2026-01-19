@@ -18,6 +18,7 @@ from thsr_ticket.view_model.error_feedback import ErrorFeedback
 from thsr_ticket.view_model.booking_result import BookingResult
 from thsr_ticket.view.web.show_error_msg import ShowErrorMsg
 from thsr_ticket.view.web.show_booking_result import ShowBookingResult
+from thsr_ticket.view.web.show_avail_trains import ShowAvailTrains
 from thsr_ticket.ml.ocr import recognize_captcha
 
 
@@ -33,6 +34,7 @@ class AutoBookingFlow:
         self.client = HTTPRequest()
         self.error_feedback = ErrorFeedback()
         self.show_error_msg = ShowErrorMsg()
+        self.show_trains = ShowAvailTrains()
         self.config = None
 
     def run(self) -> Response:
@@ -155,13 +157,9 @@ class AutoBookingFlow:
         if not trains:
             raise ValueError("沒有可用的班次！")
 
-        # 顯示所有可用班次
+        # 顯示所有可用班次（不需要使用者選擇）
         print("\n可用班次：")
-        for idx, train in enumerate(trains, 1):
-            print(
-                f"  {idx}. {train.id:>4} {train.depart}~{train.arrive} "
-                f"({train.travel_time}) {train.discount_str}"
-            )
+        self.show_trains.show(trains, select=False)
 
         # 自動選擇乘車時間最短的班次
         selected_train = avail_trains.select_shortest_travel_time()

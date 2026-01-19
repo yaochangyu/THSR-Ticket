@@ -23,6 +23,16 @@ STATION_NAME_MAP = {
     "左營": StationMapping.Zuouing,
 }
 
+# 票種中文名稱對照表
+TICKET_TYPE_NAME_MAP = {
+    TicketType.ADULT: "成人",
+    TicketType.CHILD: "孩童",
+    TicketType.DISABLED: "愛心",
+    TicketType.ELDER: "敬老",
+    TicketType.COLLEGE: "大學生",
+    TicketType.YOUTH: "少年",
+}
+
 
 def get_config_path() -> str:
     """取得 config.json 的路徑"""

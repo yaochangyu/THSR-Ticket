@@ -18,7 +18,7 @@ from thsr_ticket.configs.common import (
     DAYS_BEFORE_BOOKING_AVAILABLE,
     MAX_TICKET_NUM,
 )
-from thsr_ticket.configs.user_config import STATION_NAME_MAP
+from thsr_ticket.configs.user_config import STATION_NAME_MAP, TICKET_TYPE_NAME_MAP
 from thsr_ticket.ml.ocr import recognize_captcha
 
 MAX_CAPTCHA_RETRY = 3
@@ -158,14 +158,7 @@ class FirstPageFlow:
         ):
             return ticket_num_str
 
-        ticket_type_name = {
-            TicketType.ADULT: '成人',
-            TicketType.CHILD: '孩童',
-            TicketType.DISABLED: '愛心',
-            TicketType.ELDER: '敬老',
-            TicketType.COLLEGE: '大學生',
-            TicketType.YOUTH: '少年',
-        }.get(ticket_type)
+        ticket_type_name = TICKET_TYPE_NAME_MAP.get(ticket_type, ticket_type.name)
 
         print(f'選擇{ticket_type_name}票數（0~{MAX_TICKET_NUM}）（預設：{default_ticket_num}）')
         ticket_num = int(input() or default_ticket_num)

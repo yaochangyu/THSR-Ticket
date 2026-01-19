@@ -186,6 +186,14 @@ class AutoBookingFlow:
 
         json_params = ticket_model.json(by_alias=True)
         dict_params = json.loads(json_params)
+
+        # 解析並填入乘客身分證欄位（愛心票、敬老票等優惠票種）
+        passenger_fields = _parse_passenger_id_fields(page)
+        if passenger_fields:
+            print(f"偵測到 {len(passenger_fields)} 位乘客需要填寫身分證")
+            for field_name in passenger_fields:
+                dict_params[field_name] = self.config["personal_id"]
+
         print("正在提交乘客資訊...")
         time.sleep(STEP_DELAY)
         resp = self.client.submit_ticket(dict_params)
@@ -234,6 +242,40 @@ def _parse_member_radio(page: BeautifulSoup) -> str:
     )
     tag = next((cand for cand in candidates if "checked" in cand.attrs))
     return tag.attrs["value"]
+
+
+def _parse_passenger_id_fields(page: BeautifulSoup) -> list:
+    """解析需要填寫身分證的乘客欄位
+
+    愛心票、敬老票等優惠票種需要填寫乘客身分證。
+    這些欄位在 HTML 中會顯示（沒有 display:none），
+    欄位名稱格式為：TicketPassengerInfoInputPanel:passengerDataView:{index}:passengerDataView2:passengerDataIdNumber
+
+    Returns:
+        需要填寫的欄位名稱列表
+    """
+    passenger_fields = []
+
+    # 找出所有乘客身分證輸入欄位
+    id_inputs = page.find_all(
+        "input",
+        attrs={"class": "uk-input passengerDataIdNumber"},
+    )
+
+    for input_tag in id_inputs:
+        # 檢查父元素是否有 display:none（隱藏的欄位不需要填寫）
+        parent_div = input_tag.find_parent("div", class_="uk-form-controls")
+        if parent_div:
+            parent_style = parent_div.get("style", "")
+            if "display:none" in parent_style or "display: none" in parent_style:
+                continue
+
+        # 取得欄位名稱
+        field_name = input_tag.get("name")
+        if field_name:
+            passenger_fields.append(field_name)
+
+    return passenger_fields
 
 
 def _auto_input_security_code(img_resp: bytes, force_manual: bool = False) -> str:

@@ -1,8 +1,6 @@
-import io
 import json
 import time
-from PIL import Image
-from typing import Tuple, List
+from typing import Tuple
 from datetime import date, timedelta
 
 from bs4 import BeautifulSoup
@@ -11,7 +9,7 @@ from requests.models import Response
 from thsr_ticket.model.db import Record
 from thsr_ticket.remote.http_request import HTTPRequest
 from thsr_ticket.configs.web.param_schema import BookingModel
-from thsr_ticket.configs.web.parse_html_element import BOOKING_PAGE, ERROR_FEEDBACK
+from thsr_ticket.configs.web.parse_html_element import BOOKING_PAGE
 from thsr_ticket.configs.web.enums import StationMapping, TicketType
 from thsr_ticket.configs.common import (
     AVAILABLE_TIME_TABLE,
@@ -19,11 +17,14 @@ from thsr_ticket.configs.common import (
     MAX_TICKET_NUM,
 )
 from thsr_ticket.configs.user_config import STATION_CHINESE_NAME, TICKET_TYPE_NAME_MAP
-from thsr_ticket.ml.ocr import recognize_captcha
-
-MAX_CAPTCHA_RETRY = 3
-CAPTCHA_RETRY_INTERVAL = 1  # 秒
-
+from thsr_ticket.controller.captcha_helper import (
+    MAX_CAPTCHA_RETRY,
+    CAPTCHA_RETRY_INTERVAL,
+    input_captcha,
+    parse_error_feedback,
+    is_captcha_error,
+    has_train_data,
+)
 
 
 class FirstPageFlow:
@@ -59,7 +60,7 @@ class FirstPageFlow:
         retry_count = 0
         while True:
             use_manual = retry_count >= MAX_CAPTCHA_RETRY
-            security_code = _input_security_code(img_resp, force_manual=use_manual)
+            security_code = input_captcha(img_resp, force_manual=use_manual)
 
             book_model = BookingModel(
                 **form_data,
@@ -69,11 +70,14 @@ class FirstPageFlow:
             dict_params = json.loads(json_params)
             resp = self.client.submit_booking_form(dict_params)
 
-            # 檢查是否有驗證碼錯誤
-            errors = _parse_error_feedback(resp.content)
-            captcha_error = any('檢測碼' in err or '驗證碼' in err for err in errors)
+            # 檢查是否成功進入第二頁
+            if has_train_data(resp.content):
+                return resp, book_model
 
-            if not captcha_error:
+            # 檢查錯誤訊息
+            errors = parse_error_feedback(resp.content)
+            if not is_captcha_error(errors):
+                # 不是驗證碼錯誤，返回讓上層處理
                 return resp, book_model
 
             retry_count += 1
@@ -179,43 +183,3 @@ def _parse_search_by(page: BeautifulSoup) -> str:
     candidates = page.find_all('input', {'name': 'bookingMethod'})
     tag = next((cand for cand in candidates if 'checked' in cand.attrs))
     return tag.attrs['value']
-
-
-def _parse_error_feedback(html: bytes) -> List[str]:
-    """解析頁面中的錯誤訊息"""
-    page = BeautifulSoup(html, features='html.parser')
-    error_elements = page.find_all(**ERROR_FEEDBACK)
-    return [elem.get_text(strip=True) for elem in error_elements]
-
-
-def _input_security_code(img_resp: bytes, force_manual: bool = False) -> str:
-    """輸入驗證碼，支援 OCR 自動識別
-
-    Args:
-        img_resp: 驗證碼圖片的 bytes 資料
-        force_manual: 是否強制手動輸入（OCR 重試次數用盡後使用）
-
-    流程：
-    1. 使用 OCR 識別驗證碼
-    2. 若 force_manual=False 且 OCR 成功，直接使用 OCR 結果
-    3. 若 force_manual=True 或 OCR 失敗，顯示圖片讓用戶手動輸入
-    """
-    # OCR 識別
-    ocr_result = recognize_captcha(img_resp)
-
-    # 自動重試模式：OCR 成功則直接使用
-    if not force_manual and ocr_result:
-        print(f'驗證碼自動識別: {ocr_result}')
-        return ocr_result
-
-    # 手動輸入模式：顯示圖片讓用戶輸入
-    image = Image.open(io.BytesIO(img_resp))
-    image.show()
-
-    if ocr_result:
-        print(f'驗證碼識別結果: {ocr_result}')
-        user_input = input('按 Enter 確認，或輸入正確的驗證碼：')
-        return user_input if user_input else ocr_result
-    else:
-        print('OCR 識別失敗，請手動輸入驗證碼：')
-        return input()

@@ -11,7 +11,7 @@ from requests.models import Response
 
 from thsr_ticket.remote.http_request import HTTPRequest
 from thsr_ticket.configs.web.param_schema import BookingModel, ConfirmTrainModel, ConfirmTicketModel
-from thsr_ticket.configs.web.parse_html_element import BOOKING_PAGE, ERROR_FEEDBACK
+from thsr_ticket.configs.web.parse_html_element import BOOKING_PAGE
 from thsr_ticket.configs.user_config import load_config, parse_config
 from thsr_ticket.view_model.avail_trains import AvailTrains
 from thsr_ticket.view_model.error_feedback import ErrorFeedback
@@ -19,11 +19,17 @@ from thsr_ticket.view_model.booking_result import BookingResult
 from thsr_ticket.view.web.show_error_msg import ShowErrorMsg
 from thsr_ticket.view.web.show_booking_result import ShowBookingResult
 from thsr_ticket.view.web.show_avail_trains import ShowAvailTrains
-from thsr_ticket.ml.ocr import recognize_captcha
+from thsr_ticket.controller.captcha_helper import (
+    MAX_CAPTCHA_RETRY,
+    CAPTCHA_RETRY_INTERVAL,
+    input_captcha,
+    parse_error_feedback,
+    is_captcha_error,
+    is_no_train_error,
+    has_train_data,
+)
 
 
-MAX_CAPTCHA_RETRY = 3
-CAPTCHA_RETRY_INTERVAL = 1
 STEP_DELAY = 0.2  # 每個步驟之間的延遲（秒）
 
 
@@ -116,7 +122,7 @@ class AutoBookingFlow:
         retry_count = 0
         while True:
             use_manual = retry_count >= MAX_CAPTCHA_RETRY
-            security_code = _auto_input_security_code(img_resp, force_manual=use_manual)
+            security_code = input_captcha(img_resp, force_manual=use_manual)
 
             book_model = BookingModel(
                 **form_data,
@@ -128,11 +134,14 @@ class AutoBookingFlow:
             time.sleep(STEP_DELAY)
             resp = self.client.submit_booking_form(dict_params)
 
-            # 檢查是否有驗證碼錯誤
-            errors = _parse_error_feedback(resp.content)
-            captcha_error = any("檢測碼" in err or "驗證碼" in err for err in errors)
+            # 檢查是否成功進入第二頁
+            if has_train_data(resp.content):
+                return resp, book_model
 
-            if not captcha_error:
+            # 檢查錯誤訊息
+            errors = parse_error_feedback(resp.content)
+            if not is_captcha_error(errors):
+                # 不是驗證碼錯誤，返回讓上層處理
                 return resp, book_model
 
             retry_count += 1
@@ -155,7 +164,13 @@ class AutoBookingFlow:
         trains = avail_trains.parse(book_resp.content)
 
         if not trains:
-            raise ValueError("沒有可用的班次！")
+            # 檢查是否有錯誤訊息
+            errors = parse_error_feedback(book_resp.content)
+            if is_no_train_error(errors):
+                raise ValueError("查無可售車次或車票已售完，請重新選擇日期或時間。")
+            if errors:
+                raise ValueError(f"訂票失敗：{'; '.join(errors)}")
+            raise ValueError("沒有可用的班次！請確認日期和時間是否正確。")
 
         # 顯示所有可用班次（不需要使用者選擇）
         print("\n可用班次：")
@@ -226,13 +241,6 @@ def _parse_search_by(page: BeautifulSoup) -> str:
     return tag.attrs["value"]
 
 
-def _parse_error_feedback(html: bytes) -> list:
-    """解析頁面中的錯誤訊息"""
-    page = BeautifulSoup(html, features="html.parser")
-    error_elements = page.find_all(**ERROR_FEEDBACK)
-    return [elem.get_text(strip=True) for elem in error_elements]
-
-
 def _parse_member_radio(page: BeautifulSoup) -> str:
     candidates = page.find_all(
         "input",
@@ -276,32 +284,3 @@ def _parse_passenger_id_fields(page: BeautifulSoup) -> list:
             passenger_fields.append(field_name)
 
     return passenger_fields
-
-
-def _auto_input_security_code(img_resp: bytes, force_manual: bool = False) -> str:
-    """自動輸入驗證碼
-
-    Args:
-        img_resp: 驗證碼圖片的 bytes 資料
-        force_manual: 是否強制手動輸入
-    """
-    import io
-    from PIL import Image
-
-    ocr_result = recognize_captcha(img_resp)
-
-    if not force_manual and ocr_result:
-        print(f"驗證碼自動識別: {ocr_result}")
-        return ocr_result
-
-    # 手動輸入模式
-    image = Image.open(io.BytesIO(img_resp))
-    image.show()
-
-    if ocr_result:
-        print(f"驗證碼識別結果: {ocr_result}")
-        user_input = input("按 Enter 確認，或輸入正確的驗證碼：")
-        return user_input if user_input else ocr_result
-    else:
-        print("OCR 識別失敗，請手動輸入驗證碼：")
-        return input()

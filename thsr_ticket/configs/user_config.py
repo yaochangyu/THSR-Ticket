@@ -7,20 +7,20 @@ from .common import AVAILABLE_TIME_TABLE
 from .web.enums import StationMapping, TicketType
 
 
-# 車站中文名稱對照表
-STATION_NAME_MAP = {
-    "南港": StationMapping.Nangang,
-    "台北": StationMapping.Taipei,
-    "板橋": StationMapping.Banqiao,
-    "桃園": StationMapping.Taoyuan,
-    "新竹": StationMapping.Hsinchu,
-    "苗栗": StationMapping.Miaoli,
-    "台中": StationMapping.Taichung,
-    "彰化": StationMapping.Changhua,
-    "雲林": StationMapping.Yunlin,
-    "嘉義": StationMapping.Chiayi,
-    "台南": StationMapping.Tainan,
-    "左營": StationMapping.Zuouing,
+# 車站中文名稱對照表（用於顯示）
+STATION_CHINESE_NAME = {
+    StationMapping.Nangang: "南港",
+    StationMapping.Taipei: "台北",
+    StationMapping.Banqiao: "板橋",
+    StationMapping.Taoyuan: "桃園",
+    StationMapping.Hsinchu: "新竹",
+    StationMapping.Miaoli: "苗栗",
+    StationMapping.Taichung: "台中",
+    StationMapping.Changhua: "彰化",
+    StationMapping.Yunlin: "雲林",
+    StationMapping.Chiayi: "嘉義",
+    StationMapping.Tainan: "台南",
+    StationMapping.Zuouing: "左營",
 }
 
 # 票種中文名稱對照表
@@ -56,10 +56,10 @@ def load_config() -> Optional[dict]:
 
 
 def station_name_to_code(name: str) -> int:
-    """將車站中文名稱轉換為車站代碼
+    """將車站名稱轉換為車站代碼
 
     Args:
-        name: 車站中文名稱（如 "台北"）
+        name: 車站中文名稱（如 "台北"）或英文名稱（如 "Taipei"）
 
     Returns:
         int: 車站代碼（1-12）
@@ -67,8 +67,16 @@ def station_name_to_code(name: str) -> int:
     Raises:
         ValueError: 若車站名稱無效
     """
-    if name in STATION_NAME_MAP:
-        return STATION_NAME_MAP[name].value
+    # 嘗試用中文名稱查詢（從 STATION_CHINESE_NAME 反向查詢）
+    for station, chinese_name in STATION_CHINESE_NAME.items():
+        if name == chinese_name:
+            return station.value
+
+    # 嘗試用英文名稱查詢 StationMapping enum
+    try:
+        return StationMapping[name].value
+    except KeyError:
+        pass
 
     # 嘗試直接用數字
     try:
@@ -78,7 +86,7 @@ def station_name_to_code(name: str) -> int:
     except ValueError:
         pass
 
-    valid_names = ", ".join(STATION_NAME_MAP.keys())
+    valid_names = ", ".join(STATION_CHINESE_NAME.values())
     raise ValueError(f"無效的車站名稱: {name}。有效選項: {valid_names}")
 
 

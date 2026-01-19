@@ -18,10 +18,14 @@ from thsr_ticket.configs.common import (
     DAYS_BEFORE_BOOKING_AVAILABLE,
     MAX_TICKET_NUM,
 )
+from thsr_ticket.configs.user_config import STATION_NAME_MAP
 from thsr_ticket.ml.ocr import recognize_captcha
 
 MAX_CAPTCHA_RETRY = 3
 CAPTCHA_RETRY_INTERVAL = 1  # 秒
+
+# 建立 StationMapping -> 中文名稱的反向對照表
+STATION_CODE_TO_NAME = {station: name for name, station in STATION_NAME_MAP.items()}
 
 
 class FirstPageFlow:
@@ -105,7 +109,8 @@ class FirstPageFlow:
 
         print(f'選擇{travel_type}站：')
         for station in StationMapping:
-            print(f'{station.value}. {station.name}')
+            chinese_name = STATION_CODE_TO_NAME.get(station, station.name)
+            print(f'{station.value}. {chinese_name}')
 
         return int(
             input(f'輸入選擇(預設: {default_value})：')

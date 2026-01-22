@@ -7,6 +7,7 @@
   "email": "example@email.com",
   "phone": "0912345678",
   "tgo_account": "",
+  "passenger_ids": [],
   "tickets": {
     "adult": 1,
     "child": 0,

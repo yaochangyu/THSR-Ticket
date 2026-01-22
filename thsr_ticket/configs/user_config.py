@@ -216,6 +216,7 @@ def parse_config(config: dict) -> dict:
         "email": config.get("email", ""),
         "phone": config.get("phone", ""),
         "tgo_account": config.get("tgo_account", ""),
+        "passenger_ids": config.get("passenger_ids", []),
         "adult_ticket_num": format_ticket_num(tickets.get("adult", 1), TicketType.ADULT),
         "child_ticket_num": format_ticket_num(tickets.get("child", 0), TicketType.CHILD),
         "disabled_ticket_num": format_ticket_num(tickets.get("disabled", 0), TicketType.DISABLED),

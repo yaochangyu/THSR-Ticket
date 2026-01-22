@@ -203,11 +203,22 @@ class AutoBookingFlow:
         dict_params = json.loads(json_params)
 
         # 解析並填入乘客身分證欄位（愛心票、敬老票等優惠票種）
-        passenger_fields = _parse_passenger_id_fields(page)
-        if passenger_fields:
-            print(f"偵測到 {len(passenger_fields)} 位乘客需要填寫身分證")
-            for field_name in passenger_fields:
-                dict_params[field_name] = self.config["personal_id"]
+        passenger_info_list = _parse_passenger_id_fields(page)
+        if passenger_info_list:
+            # 從 config 中取得預設的乘客身分證列表
+            from thsr_ticket.controller.confirm_ticket_flow import _prompt_passenger_ids, _check_duplicate_ids
+            
+            predefined_ids = self.config.get("passenger_ids", [])
+            
+            # 詢問用戶輸入每位乘客的身分證（支援預設值）
+            passenger_id_map = _prompt_passenger_ids(passenger_info_list, predefined_ids)
+            
+            # 檢查身分證重複
+            _check_duplicate_ids(passenger_id_map, passenger_info_list)
+            
+            # 填入參數
+            for field_name, id_number in passenger_id_map.items():
+                dict_params[field_name] = id_number
 
         print("正在提交乘客資訊...")
         time.sleep(STEP_DELAY)
@@ -260,9 +271,12 @@ def _parse_passenger_id_fields(page: BeautifulSoup) -> list:
     欄位名稱格式為：TicketPassengerInfoInputPanel:passengerDataView:{index}:passengerDataView2:passengerDataIdNumber
 
     Returns:
-        需要填寫的欄位名稱列表
+        包含乘客資訊的字典列表，每個字典包含：
+        - field_name: 欄位名稱
+        - passenger_number: 乘客編號（1-based）
+        - ticket_type: 票種（如「愛心票」、「敬老票」）
     """
-    passenger_fields = []
+    passenger_info_list = []
 
     # 找出所有乘客身分證輸入欄位
     id_inputs = page.find_all(
@@ -280,7 +294,26 @@ def _parse_passenger_id_fields(page: BeautifulSoup) -> list:
 
         # 取得欄位名稱
         field_name = input_tag.get("name")
-        if field_name:
-            passenger_fields.append(field_name)
+        if not field_name:
+            continue
 
-    return passenger_fields
+        # 從欄位名稱解析乘客索引
+        # 格式：TicketPassengerInfoInputPanel:passengerDataView:{index}:passengerDataView2:passengerDataIdNumber
+        import re
+        match = re.search(r':passengerDataView:(\d+):', field_name)
+        passenger_index = int(match.group(1)) if match else 0
+        passenger_number = passenger_index + 1  # 轉為 1-based
+
+        # 找出對應的票種欄位
+        # 格式：TicketPassengerInfoInputPanel:passengerDataView:{index}:passengerDataView2:passengerDataTypeName
+        ticket_type_name = field_name.replace('passengerDataIdNumber', 'passengerDataTypeName')
+        ticket_type_input = page.find('input', attrs={'name': ticket_type_name})
+        ticket_type = ticket_type_input.get('value', '未知票種') if ticket_type_input else '未知票種'
+
+        passenger_info_list.append({
+            'field_name': field_name,
+            'passenger_number': passenger_number,
+            'ticket_type': ticket_type
+        })
+
+    return passenger_info_list

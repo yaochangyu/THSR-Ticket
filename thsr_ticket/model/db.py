@@ -20,6 +20,7 @@ class Record(NamedTuple):
     elder_num: str = None
     college_num: str = None
     youth_num: str = None
+    passenger_ids: List[str] = None
 
 
 class ParamDB:
